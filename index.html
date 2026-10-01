@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>校园传说 · Campus Legends</title>
+<!-- 【v0.34】PWA 手机安装包:清单/主题色/苹果桌面图标(Safari 添加到主屏幕即成 App) -->
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#0e1626" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="校园传说" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+<script>
+  /* 每次打开都用最新资源，避免浏览器缓存旧版 js/css */
+  var ASSET_V = Date.now();
+  document.write('<link rel="stylesheet" href="css/style.css?v=' + ASSET_V + '">');
+  document.write('<link rel="stylesheet" href="css/fx.css?v=' + ASSET_V + '">');
+</script>
+</head>
+<body>
+
+<!-- ================= 主菜单 ================= -->
+<section class="screen active" id="screen-menu">
+  <div class="menu-center">
+    <div class="title-emblem">
+      <p class="title-kicker">同窗 · 对战 · 传说</p>
+      <h1 class="game-title">校园传说</h1>
+      <p class="game-sub">CAMPUS LEGENDS</p>
+    </div>
+    <nav class="menu-buttons">
+      <button class="btn-menu" data-nav="screen-lobby">对 战 模 式</button>
+      <button class="btn-menu" data-nav="screen-cards">卡 牌 图 鉴</button>
+      <button class="btn-menu" id="btn-settings-open">设 置</button>
+      <button class="btn-menu" id="btn-install" hidden>⬇ 安 装 到 手 机</button>
+    </nav>
+    <p class="foot-note">UI 原型 v0.34 · 闯关收集 42 卡 / 本地双人可完整对战，联机后续接入</p>
+  </div>
+</section>
+
+<!-- ================= 对战模式大厅 ================= -->
+<section class="screen" id="screen-lobby">
+  <header class="screen-header">
+    <button class="btn-back" data-nav="screen-menu">← 返回</button>
+    <h2>对战模式</h2>
+  </header>
+  <div class="lobby-options">
+    <div class="lobby-card">
+      <div class="lobby-icon">创</div>
+      <h3>创建房间</h3>
+      <p>生成一个房间号，分享给同学，<br/>对方输入房间号即可加入对战</p>
+      <button class="btn-gold" data-nav="screen-room">创建房间</button>
+    </div>
+    <div class="lobby-card">
+      <div class="lobby-icon">加</div>
+      <h3>加入房间</h3>
+      <p>输入好友分享的 6 位房间号，<br/>进入房间开始对战</p>
+      <button class="btn-gold" data-nav="screen-join">加入房间</button>
+    </div>
+    <div class="lobby-card duo">
+      <div class="lobby-icon">双</div>
+      <h3>本地双人</h3>
+      <p>同屏轮流对战：两位同学各选英雄，<br/>交换座位轮流出牌</p>
+      <button class="btn-gold" id="btn-duo-start">开始双人对战</button>
+    </div>
+    <div class="lobby-card duo">
+      <div class="lobby-icon">闯</div>
+      <h3>闯关模式</h3>
+      <p>挑战六位同学，通关收集卡牌：<br/>收集进度实时保存，联机就绪</p>
+      <button class="btn-gold" data-nav="screen-stages">进入闯关</button>
+    </div>
+  </div>
+  <!-- v0.5 战绩条：胜负/胜率/连胜持久化在本地 -->
+  <div class="lobby-stats" id="lobby-stats"></div>
+</section>
+
+<!-- ================= 选英雄（v0.5：开战前从 11 位角色中挑选） ================= -->
+<section class="screen" id="screen-pick">
+  <header class="screen-header">
+    <button class="btn-back" data-nav="screen-lobby">← 返回</button>
+    <h2>选择你的英雄</h2>
+    <span class="count" id="pick-count"></span>
+  </header>
+  <p class="pick-note" id="pick-note">英雄决定你的英雄技能与专属组合技 · 对手将从其余角色中随机匹配</p>
+  <!-- v0.10 AI 难度选择：单机开战前定档（本地双人两位选人时自动隐藏） -->
+  <div class="diff-row hidden" id="diff-row">
+    <span class="d-label">AI 难度</span>
+    <button data-diff="easy">简 单</button>
+    <button data-diff="normal">普 通</button>
+    <button data-diff="hard">困 难</button>
+    <span class="d-note" id="diff-note"></span>
+  </div>
+  <div class="pick-grid" id="pick-grid"></div>
+  <div class="pick-actions">
+    <button class="btn-plain" id="btn-pick-random">随 机 选 择</button>
+    <button class="btn-gold big" id="btn-pick-go" disabled>开 始 对 战</button>
+  </div>
+</section>
+
+<!-- ================= 闯关模式（v0.14）：通关收集卡牌 ================= -->
+<section class="screen" id="screen-stages">
+  <header class="screen-header">
+    <button class="btn-back" data-nav="screen-lobby">← 返回</button>
+    <h2>闯关模式</h2>
+    <span class="count" id="stage-progress"></span>
+  </header>
+  <p class="pick-note">按顺序挑战同学。通关关卡即可收集新卡牌——收集进度实时保存，随时可在图鉴查看，联机对战直接可用。</p>
+  <div class="stage-list" id="stage-list"></div>
+</section>
+
+<!-- ================= 创建房间 / 等待 ================= -->
+<section class="screen" id="screen-room">
+  <header class="screen-header">
+    <button class="btn-back" data-nav="screen-lobby">← 返回</button>
+    <h2>房间等待中</h2>
+  </header>
+  <div class="room-panel">
+    <p class="room-label">房 间 号</p>
+    <div class="room-code"><span id="room-code-1">000</span><i>—</i><span id="room-code-2">000</span></div>
+    <div class="room-tools">
+      <button class="btn-small" id="btn-copy-code">复制房间号</button>
+      <button class="btn-small" id="btn-reroll-code">换一个房间号</button>
+    </div>
+    <ul class="room-players">
+      <li class="player me">
+        <span class="seat-avatar" id="seat-avatar-me"></span>
+        <div class="seat-info"><b>我</b><span>房主 · 待选择英雄</span></div>
+        <em class="ready">已就绪</em>
+      </li>
+      <li class="player waiting">
+        <span class="seat-avatar empty">?</span>
+        <div class="seat-info"><b>等待对手加入…</b><span>对方输入房间号后自动进入</span></div>
+        <em class="empty-tag">空位</em>
+      </li>
+    </ul>
+    <div class="room-actions">
+      <button class="btn-gold big" data-nav="screen-pick">开始对战（界面预览）</button>
+      <p class="hint">先选择英雄再进入对局 · 当前为界面原型，真实联机稍后接入</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 加入房间 ================= -->
+<section class="screen" id="screen-join">
+  <header class="screen-header">
+    <button class="btn-back" data-nav="screen-lobby">← 返回</button>
+    <h2>加入房间</h2>
+  </header>
+  <div class="room-panel narrow">
+    <p class="room-label">输入 6 位房间号</p>
+    <div class="code-inputs" id="code-inputs">
+      <input maxlength="1" inputmode="numeric" autocomplete="off" />
+      <input maxlength="1" inputmode="numeric" autocomplete="off" />
+      <input maxlength="1" inputmode="numeric" autocomplete="off" />
+      <i class="dash">—</i>
+      <input maxlength="1" inputmode="numeric" autocomplete="off" />
+      <input maxlength="1" inputmode="numeric" autocomplete="off" />
+      <input maxlength="1" inputmode="numeric" autocomplete="off" />
+    </div>
+    <div class="room-actions">
+      <button class="btn-gold big" id="btn-join">加入房间</button>
+      <p class="hint" id="join-hint">原型阶段：任意 6 位数字均可进入预览对局</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 卡牌图鉴 ================= -->
+<section class="screen" id="screen-cards">
+  <header class="screen-header">
+    <button class="btn-back" data-nav="screen-menu">← 返回</button>
+    <h2>卡牌图鉴 · 同学录</h2>
+    <span class="count" id="card-count"></span>
+  </header>
+  <div class="filter-tabs" id="collection-tabs">
+    <button class="ftab active" data-tab="all">全部 <em></em></button>
+    <button class="ftab" data-tab="role">角色卡 <em></em></button>
+    <button class="ftab" data-tab="spell">法术卡 <em></em></button>
+    <button class="ftab" data-tab="combo">组合技 <em></em></button>
+  </div>
+  <!-- v0.7 图鉴精进：费用排序 + 图标收集进度（已绘制 / 全部） -->
+  <!-- v0.8 机制关键词筛选：与页签/排序正交（标签由结算参数自动推导） -->
+  <div class="coll-tools">
+    <div class="filter-chips" id="collection-filter">
+      <button class="fchip active" data-tag="">全部机制</button>
+      <button class="fchip" data-tag="伤害">伤害</button>
+      <button class="fchip" data-tag="增益">增益</button>
+      <button class="fchip" data-tag="削弱">削弱</button>
+      <button class="fchip" data-tag="控制">控制</button>
+      <button class="fchip" data-tag="治疗">治疗</button>
+      <button class="fchip" data-tag="召唤">召唤</button>
+      <button class="fchip" data-tag="抽牌">抽牌</button>
+      <button class="fchip" data-tag="嘲讽">嘲讽</button>
+      <button class="fchip" data-tag="情报">情报</button>
+    </div>
+    <div class="sort-row" id="collection-sort">
+      <button class="stab active" data-sort="default">默认排序</button>
+      <button class="stab" data-sort="asc">费用 ↑</button>
+      <button class="stab" data-sort="desc">费用 ↓</button>
+    </div>
+    <div class="icon-progress" id="icon-progress"></div>
+  </div>
+  <p class="cards-note">卡面暂用统一占位图，每张卡的「图标设定」已登记在卡面与详情里，后续按设定逐张绘制</p>
+  <div class="card-grid" id="card-grid"></div>
+</section>
+
+<!-- ================= 对战界面 ================= -->
+<section class="screen" id="screen-battle">
+  <div class="battle-topbar">
+    <button class="btn-back" data-nav="screen-lobby">← 投降退出</button>
+    <div class="turn-banner" id="turn-banner">我的回合</div>
+    <div class="enemy-action hidden" id="enemy-action">敌方思考中…</div>
+    <span class="turn-count">第 <b id="turn-num">1</b> 回合</span>
+    <button class="btn-log" id="btn-log" title="战报：本局事件回放">战报</button>
+  </div>
+
+  <div class="battle-field">
+    <!-- 敌方 -->
+    <div class="side enemy">
+      <div class="hand enemy-hand" id="enemy-hand"></div>
+      <div class="hero-row" id="enemy-hero"></div>
+      <div class="board-row" id="enemy-board"></div>
+    </div>
+
+    <div class="field-divider"><span>战 场</span></div>
+
+    <!-- 我方 -->
+    <div class="side player">
+      <div class="board-row" id="player-board"></div>
+      <div class="hero-row" id="player-hero"></div>
+      <div class="battle-extras">
+        <div class="emote-panel hidden" id="emote-panel"></div>
+        <button class="btn-emote" id="btn-emote" title="表情嘲讽">😊</button>
+        <button class="btn-chat-toggle" id="btn-chat" title="聊天">💬</button>
+        <div class="chat-bar hidden" id="chat-bar">
+          <input id="chat-input" maxlength="40" placeholder="说点什么…" />
+          <button id="btn-chat-send">发送</button>
+        </div>
+      </div>
+      <div class="hero-bubble hidden" id="hero-bubble"></div>
+      <div class="hand player-hand" id="player-hand"></div>
+    </div>
+
+    <button class="btn-endturn" id="btn-endturn">结束回合</button>
+  </div>
+
+  <!-- 战报浮层：挂在 screen-battle 下（battle-field 之外），不参与牌局缩放测量 -->
+  <aside class="battle-log hidden" id="battle-log">
+    <h4>战 报<button class="btn-copylog" id="btn-copylog" title="复制全部战报文本">复制战报</button><button class="btn-logclose" id="btn-logclose" title="收起战报">×</button></h4>
+    <div class="log-body" id="log-body"></div>
+  </aside>
+</section>
+
+<!-- ================= 设置弹窗 ================= -->
+<div class="modal-mask hidden" id="modal-settings">
+  <div class="modal">
+    <h3>设 置</h3>
+    <div class="setting-row">
+      <label>音乐开关</label>
+      <button class="switch on" id="set-music-on" aria-label="音乐总开关"></button>
+    </div>
+    <div class="setting-row">
+      <label>音乐音量</label>
+      <input type="range" id="set-music" min="0" max="100" value="60" />
+      <span class="val" id="val-music">60</span>
+    </div>
+    <div class="setting-row">
+      <label>音效音量</label>
+      <input type="range" id="set-sfx" min="0" max="100" value="80" />
+      <span class="val" id="val-sfx">80</span>
+    </div>
+    <div class="setting-row">
+      <label>对战动画</label>
+      <button class="switch on" id="set-anim" aria-label="对战动画开关"></button>
+    </div>
+    <div class="setting-row">
+      <label>回合提示</label>
+      <button class="switch on" id="set-tip" aria-label="回合提示开关"></button>
+    </div>
+    <p class="hint">音效与背景音乐为本地合成（首次操作后生效），动画开关仅影响对战特效</p>
+    <div class="modal-actions">
+      <button class="btn-plain" id="btn-settings-reset">恢复默认</button>
+      <button class="btn-gold" id="btn-settings-close">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 卡牌详情弹窗 ================= -->
+<div class="modal-mask hidden" id="modal-card">
+  <div class="modal card-detail" id="card-detail-body"></div>
+</div>
+
+<div class="toast hidden" id="toast"></div>
+
+<!-- 竖屏提示（横板手游） -->
+<div class="rotate-hint" id="rotate-hint">校园传说<span>⟳</span>请横屏游玩</div>
+
+<script>window.addEventListener("error", e => { document.title = "ERR: " + e.message; });
+/* 自查工具：检测牌局各行是否重叠 / 元素是否出屏 */
+window.__layoutCheck = function () {
+  /* 【v0.23·深检5】非战斗屏守卫:屏幕未激活时六行元素 display:none、矩形全 0,
+     返回的全 0 是假"正常"——加标记让人工/脚本一眼可辨 */
+  if (!document.querySelector("#screen-battle.active")) {
+    return { overlap: 0, offscreen: 0, vh: innerHeight, notOnBattleScreen: true, rows: [] };
+  }
+  const seq = [".enemy-hand", "#enemy-hero", "#enemy-board", "#player-board", "#player-hero", ".player-hand"];
+  const rows = seq.map(function (s) {
+    var n = s.charAt(0) === "#" ? document.getElementById(s.slice(1)) : document.querySelector(s);
+    var b = n.getBoundingClientRect();
+    return { sel: s, top: Math.round(b.top), bottom: Math.round(b.bottom) };
+  });
+  var overlap = 0;
+  for (var i = 1; i < rows.length; i++) if (rows[i].top < rows[i - 1].bottom - 2) overlap++;
+  var off = 0;
+  document.querySelectorAll(".battle-field *").forEach(function (k) {
+    var b = k.getBoundingClientRect();
+    if (b.bottom > innerHeight + 1 || b.right > innerWidth + 1 || b.left < -1 || b.top < -1) off++;
+  });
+  return { overlap: overlap, offscreen: off, vh: innerHeight, rows: rows };
+};</script>
+<script>
+  document.write('<script src="js/icons.js?v=' + ASSET_V + '"><\/script>');
+  document.write('<script src="js/sound.js?v=' + ASSET_V + '"><\/script>');
+  document.write('<script src="js/app.js?v=' + ASSET_V + '"><\/script>');
+</script>
+<script>
+  /* 【v0.34】PWA:Service Worker 离线缓存注册 + 「安装到手机」按钮(file:// 下不注册,双击游玩不受影响) */
+  (function () {
+    if (!("serviceWorker" in navigator) || location.protocol.indexOf("http") !== 0) return;
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () { /* 注册失败静默,游戏照常 */ });
+    });
+    var deferred = null;
+    var btn = document.getElementById("btn-install");
+    window.addEventListener("beforeinstallprompt", function (e) {
+      e.preventDefault();
+      deferred = e;
+      if (btn) btn.hidden = false; // 仅当浏览器允许安装时亮出按钮
+    });
+    if (btn) btn.addEventListener("click", function () {
+      if (!deferred) return;
+      deferred.prompt();
+      deferred.userChoice.finally(function () { deferred = null; btn.hidden = true; });
+    });
+  })();
+</script>
+</body>
+</html>
