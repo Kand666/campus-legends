@@ -1,0 +1,1402 @@
+/* ==========================================================
+   校园传说 · Campus Legends — 动效层 fx.css
+   ----------------------------------------------------------
+   原则：
+   1. 只叠加「手感」动画，不改布局、不改配色，不覆盖 style.css 的静态样式；
+   2. 所有会动的规则都包在 @media (prefers-reduced-motion: no-preference) 内，
+      系统开启「减少动态效果」时全部自动失效；
+   3. 动画一律走 CSS @keyframes，JS 只做 classList / 结构级配合。
+   ========================================================== */
+
+/* ==========================================================
+   1. 屏幕切换：新界面轻微上移 + 淡入（约 250ms）
+      同名优先级、后加载，覆盖 style.css 里的瞬时 fadeIn
+   ========================================================== */
+@media (prefers-reduced-motion: no-preference) {
+  .screen.active { animation: fx-screen-in .25s cubic-bezier(.22, .9, .32, 1) both; }
+}
+@keyframes fx-screen-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================
+   2. 主菜单氛围：金色微光粒子 + 光晕视差
+      氛围层与粒子由 js/app.js 创建（仅结构），
+      位移、闪烁等所有动画都在本文件
+   ========================================================== */
+.fx-ambient {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+/* 让菜单内容浮在氛围层之上（纯层级，无视觉变化） */
+.menu-center { position: relative; z-index: 1; }
+
+/* 背景光晕：随鼠标轻微位移（transform 由 JS 以 ±20px 级写入） */
+.fx-glow {
+  position: absolute;
+  left: 50%; top: 38%;
+  width: 72vmax; height: 72vmax;
+  margin: -36vmax 0 0 -36vmax;
+  background: radial-gradient(circle,
+    rgba(96, 128, 210, .13),
+    rgba(216, 180, 92, .05) 45%,
+    transparent 68%);
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+/* 粒子容器：跟随做更小位移，与光晕形成视差层次 */
+.fx-particles {
+  position: absolute;
+  inset: 0;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+/* 单颗微粒：定位与节奏参数由内联自定义属性给出 */
+.fx-particle {
+  position: absolute;
+  bottom: -3vh;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 40%,
+    rgba(255, 233, 176, .9),
+    rgba(216, 180, 92, .5) 55%,
+    rgba(216, 180, 92, 0) 75%);
+  opacity: 0;
+}
+/* 闪烁光点：叠在微粒上，用独立节奏做亮度呼吸 */
+.fx-particle::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 40%,
+    rgba(255, 238, 190, .95),
+    rgba(216, 180, 92, 0) 70%);
+  opacity: var(--p-opacity, .5);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fx-particle {
+    animation: fx-particle-rise var(--rise-dur, 14s) linear infinite;
+    animation-delay: var(--rise-delay, 0s);
+  }
+  .fx-particle::after {
+    animation: fx-particle-twinkle var(--twinkle-dur, 3s) ease-in-out infinite;
+  }
+}
+/* 缓慢上浮：透明度包络（淡入 → 淡出）+ 轻微左右漂移 */
+@keyframes fx-particle-rise {
+  0%   { transform: translate3d(0, 0, 0) scale(.85); opacity: 0; }
+  10%  { opacity: .85; }
+  50%  { transform: translate3d(var(--drift, 14px), -56vh, 0) scale(1.08); }
+  90%  { opacity: .45; }
+  100% { transform: translate3d(calc(var(--drift, 14px) * -1), -112vh, 0) scale(.92); opacity: 0; }
+}
+/* 亮度呼吸 */
+@keyframes fx-particle-twinkle {
+  0%, 100% { opacity: calc(var(--p-opacity, .5) * .3); }
+  50%      { opacity: var(--p-opacity, .5); }
+}
+
+/* ==========================================================
+   3. 弹窗：遮罩淡入 + 面板缩放回弹
+      选择器带 :not(.hidden)，弹窗显示瞬间才会触发动画
+   ========================================================== */
+@media (prefers-reduced-motion: no-preference) {
+  .modal-mask:not(.hidden) { animation: fx-mask-in .22s ease both; }
+  .modal-mask:not(.hidden) .modal {
+    animation: fx-modal-pop .34s cubic-bezier(.22, .9, .32, 1) both;
+  }
+}
+@keyframes fx-mask-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fx-modal-pop {
+  0%   { transform: scale(.88) translateY(12px); opacity: 0; }
+  60%  { transform: scale(1.02) translateY(0); opacity: 1; }
+  80%  { transform: scale(.995); }
+  100% { transform: scale(1); }
+}
+
+/* ==========================================================
+   4. 对战界面
+   ========================================================== */
+/* 回合横幅：补充定位上下文，供扫光 ::after 使用（无视觉变化） */
+.turn-banner { position: relative; overflow: hidden; }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* 横幅强调：放大 → 回弹（.enemy.fx-pop 更高优先级，压过敌方呼吸动画） */
+  .turn-banner.fx-pop,
+  .turn-banner.enemy.fx-pop { animation: fx-banner-pop .55s cubic-bezier(.34, 1.56, .64, 1) both; }
+  /* 金色扫光掠过（总时长短于横幅动画，避免被提前摘类截断） */
+  .turn-banner.fx-pop::after {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    width: 34%;
+    pointer-events: none;
+    background: linear-gradient(100deg,
+      transparent,
+      rgba(240, 214, 138, .26) 45%,
+      rgba(255, 250, 230, .4) 50%,
+      rgba(240, 214, 138, .26) 55%,
+      transparent);
+    transform: translateX(-130%);
+    animation: fx-banner-sheen .45s ease-out .05s both;
+  }
+  /* 敌方回合：扫光偏红 */
+  .turn-banner.enemy.fx-pop::after {
+    background: linear-gradient(100deg,
+      transparent,
+      rgba(255, 154, 138, .3) 50%,
+      transparent);
+  }
+
+  /* 法力水晶：依次弹跳点亮（.fx-wave 由 JS 在进入对战 / 回合开始时添加） */
+  .mana-crystals.fx-wave .crystal.filled {
+    animation: fx-crystal-pop .5s cubic-bezier(.34, 1.56, .64, 1) both;
+  }
+  .mana-crystals.fx-wave .crystal.filled:nth-child(1)  { animation-delay: .04s; }
+  .mana-crystals.fx-wave .crystal.filled:nth-child(2)  { animation-delay: .10s; }
+  .mana-crystals.fx-wave .crystal.filled:nth-child(3)  { animation-delay: .16s; }
+  .mana-crystals.fx-wave .crystal.filled:nth-child(4)  { animation-delay: .22s; }
+  .mana-crystals.fx-wave .crystal.filled:nth-child(5)  { animation-delay: .28s; }
+  .mana-crystals.fx-wave .crystal.filled:nth-child(6)  { animation-delay: .34s; }
+  .mana-crystals.fx-wave .crystal.filled:nth-child(7)  { animation-delay: .40s; }
+  .mana-crystals.fx-wave .crystal.filled:nth-child(8)  { animation-delay: .46s; }
+  .mana-crystals.fx-wave .crystal.filled:nth-child(9)  { animation-delay: .52s; }
+  .mana-crystals.fx-wave .crystal.filled:nth-child(10) { animation-delay: .58s; }
+
+  /* 结束回合按钮：按压感（保留原 translateY(-50%) 的定位变换） */
+  .btn-endturn:active:not(:disabled) {
+    transform: translateY(-50%) scale(.92);
+    filter: brightness(.88) saturate(1.1);
+  }
+  /* 点击确认：绿色光环向外扩散（.fx-flash 由 JS 添加，动画结束自动摘除） */
+  .btn-endturn.fx-flash::before {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    border: 2px solid rgba(159, 224, 159, .75);
+    pointer-events: none;
+    animation: fx-ring-out .55s ease-out both;
+  }
+}
+@keyframes fx-banner-pop {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.16); }
+  60%  { transform: scale(.97); }
+  100% { transform: scale(1); }
+}
+@keyframes fx-banner-sheen {
+  to { transform: translateX(430%); }
+}
+/* 水晶基础态带 rotate(45deg)，动画全程必须保留 */
+@keyframes fx-crystal-pop {
+  0%   { transform: rotate(45deg) scale(.2); opacity: .15; }
+  55%  { transform: rotate(45deg) scale(1.5); opacity: 1; }
+  75%  { transform: rotate(45deg) scale(.88); }
+  100% { transform: rotate(45deg) scale(1); opacity: 1; }
+}
+@keyframes fx-ring-out {
+  from { opacity: .9; transform: scale(1); }
+  to   { opacity: 0; transform: scale(1.3); }
+}
+
+/* ==========================================================
+   5. 手牌与图鉴卡牌
+   ========================================================== */
+@media (prefers-reduced-motion: no-preference) {
+  /* 手牌按下：短暂压暗缩小（保留扇形角度，松手回到既有悬停态） */
+  .player-hand .card-inhand:active {
+    transform: rotate(var(--r, 0deg)) translateY(calc(var(--y, 0px) - 14px)) scale(.95);
+    filter: brightness(.9);
+    transition-duration: .09s;
+  }
+
+  /* 图鉴卡片：进入视口时上浮淡入（.fx-in 由 IntersectionObserver 添加） */
+  .card-grid.fx-anim .ccard:not(.fx-in) { opacity: 0; }
+  .card-grid.fx-anim .ccard.fx-in {
+    animation: fx-card-in .5s cubic-bezier(.22, .9, .32, 1) both;
+  }
+  /* 首屏同批出现的卡片做轻微错位，之后的卡片即时入场 */
+  .card-grid.fx-anim .ccard.fx-in:nth-child(2) { animation-delay: .07s; }
+  .card-grid.fx-anim .ccard.fx-in:nth-child(3) { animation-delay: .14s; }
+  .card-grid.fx-anim .ccard.fx-in:nth-child(4) { animation-delay: .21s; }
+  .card-grid.fx-anim .ccard.fx-in:nth-child(5) { animation-delay: .28s; }
+  .card-grid.fx-anim .ccard.fx-in:nth-child(6) { animation-delay: .35s; }
+  .card-grid.fx-anim .ccard.fx-in:nth-child(7) { animation-delay: .42s; }
+  .card-grid.fx-anim .ccard.fx-in:nth-child(8) { animation-delay: .49s; }
+}
+@keyframes fx-card-in {
+  from { opacity: 0; transform: translateY(16px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ==========================================================
+   6. 房间号：数字逐位翻出
+      （.fx-digit 由 renderRoomCode 重建节点，动画自动重放）
+   ========================================================== */
+/* 透视上下文，供数字 3D 翻转使用 */
+.room-code { perspective: 600px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .room-code .fx-digit {
+    display: inline-block;
+    animation: fx-digit-in .45s cubic-bezier(.34, 1.4, .5, 1) both;
+  }
+  #room-code-1 .fx-digit:nth-child(1) { animation-delay: .04s; }
+  #room-code-1 .fx-digit:nth-child(2) { animation-delay: .12s; }
+  #room-code-1 .fx-digit:nth-child(3) { animation-delay: .20s; }
+  #room-code-2 .fx-digit:nth-child(1) { animation-delay: .32s; }
+  #room-code-2 .fx-digit:nth-child(2) { animation-delay: .40s; }
+  #room-code-2 .fx-digit:nth-child(3) { animation-delay: .48s; }
+}
+@keyframes fx-digit-in {
+  from { opacity: 0; transform: translateY(12px) rotateX(70deg); }
+  to   { opacity: 1; transform: translateY(0) rotateX(0deg); }
+}
+
+/* ==========================================================
+   8. 出牌瞄准 / 增益飘字 / 组合技大特效
+      （基础样式在 style.css，这里只放会动的关键帧）
+   ========================================================== */
+@media (prefers-reduced-motion: no-preference) {
+  /* 可选目标：金色呼吸高亮 */
+  .minion.targetable { animation: fx-target-pulse 1s ease-in-out infinite; }
+  /* 组合技：全屏金光 + 技名横幅 */
+  .fx-combo-flash { animation: fx-combo-flash .9s ease-out both; }
+  .fx-combo-banner { animation: fx-combo-banner 1.7s cubic-bezier(.22, .9, .32, 1) both; }
+  /* 增益/减益/锁定飘字上浮（fx-dmg 复用上方伤害飘字关键帧） */
+  .fx-buff, .fx-dmg { animation: fx-float-up .85s ease-out both; }
+  .fx-lock-note { color: #9ec0ff; }
+}
+@keyframes fx-target-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(216, 180, 92, .45); }
+  50%      { box-shadow: 0 0 22px rgba(240, 214, 138, .95); }
+}
+@keyframes fx-combo-flash {
+  0%   { opacity: 0; }
+  25%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes fx-combo-banner {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(.7); }
+  16%  { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  30%  { transform: translate(-50%, -50%) scale(1); }
+  78%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -64%) scale(1.03); }
+}
+@keyframes fx-float-up {
+  0%   { opacity: 0; transform: translate(-50%, 8px) scale(.8); }
+  25%  { opacity: 1; transform: translate(-50%, 0) scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -20px) scale(1); }
+}
+/* 吹回手牌：随从向上飘出战场（数据随后移除） */
+@media (prefers-reduced-motion: no-preference) {
+  .minion.fx-bounce-out { animation: fx-bounce-out .4s ease-in both; }
+}
+@keyframes fx-bounce-out {
+  0%   { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-46px) scale(.6) rotate(8deg); opacity: 0; }
+}
+
+/* ==========================================================
+   7. 打出手牌：幽灵卡飞出 → 随从落地 / 法术爆发 → 结算飘字
+      幽灵卡的飞行位移由 js/app.js 的 WAAPI 驱动，
+      这里提供幽灵卡静态样式与落地、爆发、飘字等关键帧
+   ========================================================== */
+/* 幽灵卡：脱离文档流的飞行副本（位置由 JS 内联给定） */
+.fx-fly {
+  position: fixed;
+  z-index: 90;
+  margin: 0 !important;
+  pointer-events: none;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .65);
+  will-change: transform, opacity;
+}
+
+/* 随从落地：从略大缩到正常，带轻微下压回弹
+ * 【v0.16】拍值表核对：出牌 400ms = 100 预落 / 120 触地压扁 / 180 回弹（art-design 九节） */
+@media (prefers-reduced-motion: no-preference) {
+  .minion.fx-land { animation: fx-minion-land .4s cubic-bezier(.2, .8, .3, 1.25) both; }
+}
+@keyframes fx-minion-land {
+  0%   { transform: scale(1.55) translateY(-12px); opacity: 0; }
+  25%  { transform: scale(1.18) translateY(-4px); opacity: 1; }  /* ~100ms 预落 */
+  55%  { transform: scale(.94) translateY(0); opacity: 1; }       /* ~120ms 触地压扁（体积守恒的前奏） */
+  100% { transform: scale(1) translateY(0); }                     /* ~180ms 回弹归位 */
+}
+/* 落地尘环：随从脚下的金色椭圆光环 */
+.fx-land-ring {
+  position: absolute;
+  left: 50%; bottom: -3px;
+  width: 96px; height: 24px;
+  margin-left: -48px;
+  border-radius: 50%;
+  border: 2px solid rgba(216, 180, 92, .85);
+  box-shadow: 0 0 10px rgba(216, 180, 92, .5);
+  pointer-events: none;
+  z-index: 3;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fx-land-ring { animation: fx-land-ring .55s ease-out .08s both; }
+}
+@keyframes fx-land-ring {
+  0%   { transform: scale(.25); opacity: .95; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* 法术爆发：双环冲击波 + 中心闪光（定位在战场中上方） */
+.fx-burst {
+  position: fixed;
+  z-index: 88;
+  width: 150px; height: 150px;
+  margin: -75px 0 0 -75px;
+  pointer-events: none;
+}
+.fx-burst i, .fx-burst b { position: absolute; inset: 0; border-radius: 50%; opacity: 0; }
+.fx-burst i { border: 3px solid rgba(143, 195, 255, .95); box-shadow: 0 0 18px rgba(143, 195, 255, .6); }
+.fx-burst b { border: 2px solid rgba(216, 180, 92, .85); box-shadow: 0 0 14px rgba(216, 180, 92, .5); }
+.fx-burst::before {
+  content: "";
+  position: absolute; inset: 30%;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(255, 244, 214, .95),
+    rgba(143, 195, 255, .35) 60%,
+    transparent 75%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fx-burst i { animation: fx-burst-ring .6s cubic-bezier(.2, .7, .3, 1) both; }
+  .fx-burst b { animation: fx-burst-ring .6s cubic-bezier(.2, .7, .3, 1) both .12s; }
+  .fx-burst::before { animation: fx-burst-flash .35s ease-out both; }
+}
+@keyframes fx-burst-ring {
+  0%   { transform: scale(.12); opacity: 1; }
+  100% { transform: scale(1.3); opacity: 0; }
+}
+@keyframes fx-burst-flash {
+  0%   { transform: scale(.4); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+/* 法术名上浮消散 */
+.fx-spell-name {
+  position: fixed;
+  z-index: 89;
+  transform: translate(-50%, -50%);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 5px;
+  color: #ffe9b0;
+  text-shadow: 0 0 14px rgba(216, 180, 92, .95), 0 2px 6px rgba(0, 0, 0, .8);
+  pointer-events: none;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fx-spell-name { animation: fx-spell-name-up 1s ease-out both; }
+}
+@keyframes fx-spell-name-up {
+  0%   { opacity: 0; transform: translate(-50%, -30%) scale(.82); }
+  22%  { opacity: 1; transform: translate(-50%, -60%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -170%) scale(1.06); }
+}
+
+/* 伤害飘字：法术命中随从时的 -N（【v0.15】伊顿检验：伤害红偏朱红，不偏洋红） */
+.fx-dmg {
+  position: absolute;
+  left: 50%; top: 6px;
+  z-index: 5;
+  font-size: 15px;
+  font-weight: 900;
+  color: #ff5a3d;
+  text-shadow: 0 2px 5px rgba(0, 0, 0, .85);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fx-dmg { animation: fx-dmg-float .6s cubic-bezier(.3,.7,.35,1) both; }
+}
+/* 【v0.16】拍值表核对：伤害数字 600ms = 拉伸弹出 120ms → 悬停 → 上飘消散（art-design 九节） */
+@keyframes fx-dmg-float {
+  0%   { opacity: 0; transform: translate(-50%, 8px) scale(.55, .8); }
+  20%  { opacity: 1; transform: translate(-50%, -5px) scale(1.3, .95); } /* ~120ms 拉伸弹出（横向拉伸纵向压缩） */
+  34%  { transform: translate(-50%, 1px) scale(.96, 1.06); }             /* 回弹 */
+  44%  { transform: translate(-50%, 0) scale(1.05, .98); }
+  56%  { transform: translate(-50%, -1px) scale(1); }                    /* 悬停定场 */
+  100% { opacity: 0; transform: translate(-50%, -22px) scale(1); }       /* 上飘消散 */
+}
+
+/* 随从死亡：缩小淡出（数据随后移除） */
+@media (prefers-reduced-motion: no-preference) {
+  .minion.fx-die { animation: fx-minion-die .36s ease-in both; }
+}
+@keyframes fx-minion-die {
+  0%   { transform: scale(1) rotate(0); opacity: 1; filter: brightness(1); }
+  100% { transform: scale(.55) rotate(6deg); opacity: 0; filter: brightness(1.6) saturate(.4); }
+}
+
+/* 法力不足：法力条摇晃提示（【v0.16】拍值表：受击抖动 350ms）
+ * 【v0.23·深检4】关键帧改名 fx-shake-x:与下方英雄受击版(translate+rotate)同名双定义时后者恒胜,
+ * 这条 translateX 版永远不可达——改名后两套各自可用,未来恢复"法力不足摇晃"挂 .fx-shake 即吃到纯横移版 */
+@media (prefers-reduced-motion: no-preference) {
+  .fx-shake { animation: fx-shake-x .35s ease; }
+}
+@keyframes fx-shake-x {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+/* 费用不足的手牌宝石置灰 */
+.cost-gem.unaffordable { filter: grayscale(.85) brightness(.65); }
+
+/* ==========================================================
+   9. 牌局氛围：牌桌整体呼吸光 / 结束回合余晖 / 法力晶辉
+      幅度全部压在肉眼"隐约可感"的量级（透明度 ≤3%、辉光微增），
+      不碰布局，落地尘环等既有特效一概不动
+   ========================================================== */
+@media (prefers-reduced-motion: no-preference) {
+  /* 牌桌桌布（菱纹 + 纹章）整体明暗呼吸：周期 9s，透明度 1 → .97 */
+  .battle-field::before { animation: fx-table-breath 9s ease-in-out infinite; }
+  /* 角花与细金线装饰层：更慢的 13s 错相呼吸，与桌布形成层次 */
+  .battle-field::after { animation: fx-table-ornament-breath 13s ease-in-out -4s infinite; }
+  /* 结束回合按钮：可用时的绿色余晖缓慢涨落（禁用态不参与） */
+  .btn-endturn:not(:disabled) { animation: fx-endturn-glow 7s ease-in-out infinite; }
+  /* 满法力水晶：高光轻微涨落，像宝石在发光 */
+  .crystal.filled { animation: fx-crystal-glint 3.8s ease-in-out infinite; }
+}
+@keyframes fx-table-breath {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .97; }
+}
+@keyframes fx-table-ornament-breath {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .97; }
+}
+/* 静态阴影列表与 style.css 的 .btn-endturn 保持一致，只让外圈绿晕涨落 */
+@keyframes fx-endturn-glow {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.5),
+      inset 0 -5px 10px rgba(8,52,8,.45),
+      0 5px 16px rgba(0,0,0,.5),
+      0 0 0 1px rgba(0,0,0,.35),
+      0 0 18px rgba(74,166,74,.30);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.55),
+      inset 0 -5px 10px rgba(8,52,8,.45),
+      0 5px 16px rgba(0,0,0,.5),
+      0 0 0 1px rgba(0,0,0,.35),
+      0 0 27px rgba(120,205,120,.48);
+  }
+}
+@keyframes fx-crystal-glint {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.14); }
+}
+
+/* ==========================================================
+   9. 随从攻击交互 + 终局遮罩（v0.2 新增）
+   ========================================================== */
+/* 发起攻击的随从：悬浮拔起 + 金绿辉光，明确「已选中」 */
+.minion.attacking {
+  transform: translateY(-10px) scale(1.06);
+  border-color: #b8e08a;
+  box-shadow:
+    0 0 18px rgba(159,224,159,.65),
+    0 10px 22px rgba(0,0,0,.55),
+    inset 0 0 0 1px rgba(190,240,170,.45),
+    inset 0 1px 0 rgba(255,255,255,.3);
+  z-index: 3;
+  cursor: pointer;
+}
+/* 可攻击随从的可点提示（绿框微呼吸，仅在允许动画时）
+ * 【v0.16】循环四关键帧 + 重心位移（art-design 九节：只有透明度变化=贴纸，循环要带重心律动） */
+.minion.can-attack { cursor: pointer; }
+@media (prefers-reduced-motion: no-preference) {
+  .minion.can-attack { animation: fx-canattack-breath 2.6s ease-in-out infinite; }
+}
+@keyframes fx-canattack-breath {
+  0%      { transform: translateY(0); box-shadow: 0 0 10px rgba(74,166,74,.45), 0 5px 12px rgba(0,0,0,.5), inset 0 0 0 1px rgba(159,224,159,.35), inset 0 1px 0 rgba(255,255,255,.25); }
+  28%     { transform: translateY(-1.5px); box-shadow: 0 0 15px rgba(105,196,105,.58), 0 5px 12px rgba(0,0,0,.5), inset 0 0 0 1px rgba(159,224,159,.46), inset 0 1px 0 rgba(255,255,255,.27); } /* 低位→上浮 */
+  50%     { transform: translateY(0); box-shadow: 0 0 17px rgba(120,205,120,.62), 0 5px 12px rgba(0,0,0,.5), inset 0 0 0 1px rgba(159,224,159,.5), inset 0 1px 0 rgba(255,255,255,.28); } /* 通过 */
+  74%     { transform: translateY(-1px); box-shadow: 0 0 14px rgba(105,196,105,.55), 0 5px 12px rgba(0,0,0,.5), inset 0 0 0 1px rgba(159,224,159,.44), inset 0 1px 0 rgba(255,255,255,.27); } /* 高位（次峰低半档=错拍） */
+  100%    { transform: translateY(0); box-shadow: 0 0 10px rgba(74,166,74,.45), 0 5px 12px rgba(0,0,0,.5), inset 0 0 0 1px rgba(159,224,159,.35), inset 0 1px 0 rgba(255,255,255,.25); }
+}
+/* 攻击选择中：敌方英雄座也变成可点目标（金环呼吸 + 准星） */
+.hero-card.targetable {
+  cursor: crosshair;
+  border-color: var(--gold);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hero-card.targetable { animation: fx-hero-targetable 1.5s ease-in-out infinite; }
+}
+@keyframes fx-hero-targetable {
+  0%, 100% { box-shadow: 0 6px 18px rgba(0,0,0,.55), 0 0 10px rgba(216,180,92,.35), inset 0 0 0 1px rgba(216,180,92,.25), inset 0 1px 0 rgba(255,236,190,.25); }
+  50%      { box-shadow: 0 6px 18px rgba(0,0,0,.55), 0 0 22px rgba(216,180,92,.6), inset 0 0 0 1px rgba(240,214,138,.5), inset 0 1px 0 rgba(255,236,190,.3); }
+}
+
+/* 终局遮罩：暗场 + 胜负面板
+ * 【v0.20】史诗公式（art-design 二十节）：黑剪影框（四边渐晕）+ 单一光源朝光递增（中央亮斑）；
+ * 胜=金光源 / 败=暗红余烬 */
+.fx-end-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 8, 16, .8);
+  backdrop-filter: blur(3px);
+}
+.fx-end-mask.win {
+  background:
+    radial-gradient(ellipse 58% 40% at 50% 40%, rgba(216, 180, 92, .16), transparent 62%),
+    radial-gradient(ellipse 130% 100% at 50% 46%, transparent 42%, rgba(2, 4, 9, .92) 100%),
+    rgba(5, 8, 16, .8);
+}
+.fx-end-mask.lose {
+  background:
+    radial-gradient(ellipse 58% 40% at 50% 40%, rgba(126, 42, 28, .13), transparent 62%),
+    radial-gradient(ellipse 130% 100% at 50% 46%, transparent 42%, rgba(7, 2, 2, .92) 100%),
+    rgba(6, 5, 8, .84);
+}
+.fx-end-mask.handoff { background: rgba(5, 8, 16, .78); } /* 交接遮罩保持素净（防偷看不演出） */
+@media (prefers-reduced-motion: no-preference) {
+  .fx-end-mask { animation: fx-mask-in .4s ease both; }
+  .fx-end-panel { animation: fx-end-pop .5s cubic-bezier(.2,.9,.3,1.2) .12s both; }
+  .fx-end-panel b { animation: fx-end-shine 2.6s ease-in-out .7s infinite; }
+}
+@keyframes fx-end-pop {
+  from { opacity: 0; transform: translateY(26px) scale(.86); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes fx-end-shine {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.22); }
+}
+.fx-end-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 46px 84px;
+  border-radius: 16px;
+  border: 2px solid var(--gold);
+  background:
+    linear-gradient(180deg, rgba(255,244,214,.07), rgba(255,255,255,0) 45%),
+    linear-gradient(180deg, #2a2214, #171208);
+  box-shadow:
+    0 18px 48px rgba(0,0,0,.7),
+    inset 0 0 0 1px rgba(216,180,92,.25),
+    inset 0 1px 0 rgba(255,236,190,.25);
+  text-align: center;
+}
+.fx-end-panel b {
+  font-size: 56px;
+  font-weight: 900;
+  letter-spacing: 22px;
+  text-indent: 22px;
+  background: linear-gradient(180deg, #fdf6dd, var(--gold-hi) 35%, var(--gold) 60%, #9a7530);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 2px rgba(20,12,0,.6)) drop-shadow(0 0 26px rgba(216,180,92,.35));
+}
+.fx-end-mask.lose .fx-end-panel b {
+  background: linear-gradient(180deg, #ffd9d2, #ff9a8a 35%, #d84a3a 60%, #7c2a1e);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.fx-end-panel span { color: var(--ink-dim); font-size: 14px; letter-spacing: 2px; }
+.fx-end-actions { display: flex; gap: 14px; margin-top: 8px; }
+
+/* v0.8 终局回顾块：双方英雄 / 回合数 / 组合技回顾 / 战绩摘要 */
+.fx-end-recap {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 2px;
+  padding: 14px 22px;
+  border-radius: 10px;
+  border: 1px solid rgba(216, 180, 92, .3);
+  background: linear-gradient(180deg, rgba(0,0,0,.32), rgba(0,0,0,.16));
+  box-shadow: inset 0 1px 0 rgba(255, 236, 190, .1);
+  max-width: 560px;
+}
+.fx-end-recap span { font-size: 12.5px; letter-spacing: 1px; line-height: 1.8; color: var(--ink-dim); }
+.fx-end-recap .r-vs i { color: #f0d68a; font-weight: 800; font-style: normal; }
+.fx-end-recap .r-combo b {
+  color: var(--gold-hi);
+  font-weight: 800;
+  margin-right: 10px;
+  letter-spacing: 2px;
+}
+.fx-end-recap .r-stats { color: rgba(232, 217, 184, .82); }
+/* v0.9 胜者金句：胜出英雄风味故事的第一句，斜体淡金 */
+.fx-end-recap .r-quote {
+  color: rgba(240, 214, 138, .78);
+  font-style: italic;
+}
+@media (max-width: 760px) {
+  .fx-end-recap { max-width: 86vw; padding: 10px 14px; }
+  .fx-end-recap span { font-size: 11px; letter-spacing: .5px; }
+}
+/* 矮窗：回顾块加高后压缩面板留白，防止胜负面板出屏 */
+@media (max-height: 620px) {
+  .fx-end-panel { padding: 16px 30px; gap: 8px; }
+  .fx-end-panel b { font-size: 30px; letter-spacing: 12px; text-indent: 12px; }
+  .fx-end-recap { padding: 8px 14px; gap: 4px; }
+  .fx-end-recap span { font-size: 11px; line-height: 1.55; }
+}
+
+/* 英雄受击抖动 */
+@keyframes fx-shake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-5px, 2px) rotate(-.6deg); }
+  40% { transform: translate(5px, -2px) rotate(.6deg); }
+  60% { transform: translate(-4px, 1px); }
+  80% { transform: translate(4px, -1px); }
+}
+.hero-card.fx-shake { animation: fx-shake .35s ease; }
+
+/* ==========================================================
+   10. 英雄技能按钮：可用态绿光呼吸（v0.3）
+   【v0.16】错速：2.6s → 2.9s，与随从可攻击呼吸(2.6s)不同频，避免全场同频共振
+   ========================================================== */
+@media (prefers-reduced-motion: no-preference) {
+  .power-btn.usable { animation: fx-power-breath 2.9s ease-in-out infinite; }
+}
+@keyframes fx-power-breath {
+  0%, 100% {
+    box-shadow:
+      0 0 9px rgba(74,166,74,.42),
+      0 4px 10px rgba(0,0,0,.55),
+      inset 0 0 0 1px rgba(159,224,159,.35);
+  }
+  50% {
+    box-shadow:
+      0 0 18px rgba(120,205,120,.62),
+      0 4px 10px rgba(0,0,0,.55),
+      inset 0 0 0 1px rgba(159,224,159,.5);
+  }
+}
+
+/* ==========================================================
+   11. v0.4 手感精进：攻击拖尾 / 命中冲击 / 英雄裂纹 / 战报入场
+   ========================================================== */
+
+/* 攻击拖尾：从攻击者射向目标的金色光痕（JS 定位 + --ang 角度参数） */
+.fx-streak {
+  position: fixed;
+  height: 9px;
+  border-radius: 6px;
+  transform-origin: 0 50%;
+  pointer-events: none;
+  z-index: 86;
+  background: linear-gradient(90deg,
+    rgba(255, 235, 180, 0),
+    rgba(255, 226, 150, .5) 35%,
+    rgba(255, 244, 214, .92) 82%,
+    rgba(255, 255, 255, .98));
+  filter: blur(1px);
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fx-streak { animation: fx-streak-sweep .4s cubic-bezier(.25,.75,.4,1) both; }
+}
+@keyframes fx-streak-sweep {
+  0%   { opacity: 0; transform: rotate(var(--ang, 0deg)) scaleX(.05); }
+  38%  { opacity: 1; transform: rotate(var(--ang, 0deg)) scaleX(1); }
+  100% { opacity: 0; transform: rotate(var(--ang, 0deg)) scaleX(1.05); }
+}
+
+/* 【v0.15】命中特效（打击感六律·第二批示范 A/D 区迁移）：直线锯齿星 + 白负形核 + 阵营分色；
+ * 命中 280ms（拍值表 250~300ms），闪烁只给最亮层（steps 硬切不补间） */
+.fx-hitstar {
+  position: fixed;
+  z-index: 87;
+  width: 64px; height: 64px;
+  margin: -32px 0 0 -32px;
+  pointer-events: none;
+}
+.fx-hitstar.big { width: 96px; height: 96px; margin: -48px 0 0 -48px; }
+.fx-hitstar svg { width: 100%; height: 100%; display: block; }
+.fx-hitstar b { /* 白闪层：负形核上的极值亮度，80ms×2 硬切 */
+  position: absolute; inset: -18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,.98) 30%, rgba(255,244,214,.55) 60%, transparent 78%);
+  opacity: 0;
+}
+.fx-hitring { /* 重击冲击环：正视同心环（有厚度的带） */
+  position: fixed;
+  width: 22px; height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 3px solid rgba(255, 236, 180, .92);
+  border-radius: 50%;
+  z-index: 86;
+  pointer-events: none;
+  box-shadow: 0 0 12px rgba(255, 200, 110, .45);
+}
+.fx-hshard { /* yutapon 菱形碎块：亮面/固有色/暗面 3 档明度 */
+  position: fixed;
+  width: 11px; height: 17px;
+  z-index: 86;
+  pointer-events: none;
+  background: linear-gradient(180deg, #ffe9a8 0 42%, #f5b841 42% 74%, #8a4a1f 74%);
+  clip-path: polygon(50% 0, 100% 32%, 72% 100%, 28% 100%, 0 32%);
+}
+.fx-hshard.sm { width: 7px; height: 11px; }
+.fx-streak.enemy { /* 敌方攻击拖尾：阵营红（我方金 / 敌方红，攻防颜色编码律） */
+  background: linear-gradient(90deg,
+    rgba(255, 130, 100, 0),
+    rgba(255, 116, 86, .5) 35%,
+    rgba(255, 176, 146, .92) 82%,
+    rgba(255, 240, 226, .98));
+}
+
+/* 【v0.16】攻击残影（武打三段式·涂抹帧）：冲进路径上的阵营色剪影渐隐 */
+.fx-afterimage {
+  position: fixed;
+  z-index: 85;
+  border-radius: 10px;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(180deg, rgba(255, 236, 190, .34), rgba(216, 180, 92, .18) 60%, rgba(216, 180, 92, 0));
+  border: 1.5px solid rgba(255, 236, 190, .4);
+  box-shadow: 0 0 14px rgba(216, 180, 92, .25);
+}
+.fx-afterimage.enemy {
+  background: linear-gradient(180deg, rgba(255, 176, 146, .34), rgba(224, 87, 74, .18) 60%, rgba(224, 87, 74, 0));
+  border-color: rgba(255, 190, 165, .4);
+  box-shadow: 0 0 14px rgba(224, 87, 74, .25);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fx-afterimage { animation: fx-afterimage-fade var(--amd, .34s) cubic-bezier(.2, .6, .4, 1) both; }
+}
+@keyframes fx-afterimage-fade {
+  0%   { opacity: .55; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.06); }
+}
+
+/* 【v0.16】受击形变链（体积守恒）：squash 压扁变宽 → stretch 回弹拉长 → 归位 */
+@media (prefers-reduced-motion: no-preference) {
+  .minion.fx-squash { animation: fx-hit-squash .35s cubic-bezier(.3, .7, .4, 1) both; }
+}
+@keyframes fx-hit-squash {
+  0%   { transform: scale(1, 1); }
+  22%  { transform: scale(1.12, .82); }  /* squash：压扁必变宽 */
+  50%  { transform: scale(.92, 1.1); }   /* stretch：拉长必变窄 */
+  100% { transform: scale(1, 1); }
+}
+
+/* ==========================================================
+   【v0.18】元素法术特效（四张环境法术专属，元素动效五律 + 天气水七律）
+   火三层色带+锯齿舌尖+白核 steps / 风月牙白浪+速度线出画+碎屑流 /
+   雨三层统一倾角错速下落+一溅三群 / 雾=对比度坍缩+软边面纱+下 1/3 浓缩带
+   ========================================================== */
+
+/* —— 焚机绝冲·火：三层错速（内快外慢 0.6/0.9/1.2s）+ 白核竖长条闪烁 + 舌尖上飘 —— */
+.fx-fire {
+  position: fixed;
+  z-index: 84;
+  width: 0; height: 0;
+  pointer-events: none;
+}
+.fx-fire i { position: absolute; pointer-events: none; }
+.fx-fire .f1, .fx-fire .f2, .fx-fire .f3 {
+  left: 50%; top: 50%;
+  border-radius: 52% 48% 55% 45% / 48% 55% 45% 52%;
+}
+.fx-fire .f1 { width: 220px; height: 210px; margin: -105px 0 0 -110px;
+  background: radial-gradient(circle at 46% 42%, #e84a00 58%, rgba(181,51,0,.86) 82%, transparent 92%); opacity: 0; }
+.fx-fire .f2 { width: 158px; height: 150px; margin: -75px 0 0 -79px;
+  background: radial-gradient(circle at 45% 40%, #ff8c00 60%, rgba(232,74,0,.8) 84%, transparent 94%); opacity: 0; }
+.fx-fire .f3 { width: 106px; height: 100px; margin: -50px 0 0 -53px;
+  background: radial-gradient(circle at 44% 40%, #ffb300 62%, rgba(255,140,0,.8) 86%, transparent 96%); opacity: 0; }
+.fx-fire .core { /* 白核：竖长条沿燃烧主轴（最热通道），配额 ~20%，steps 硬切闪烁 */
+  left: 50%; top: 50%;
+  width: 44px; height: 82px; margin: -41px 0 0 -22px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #fff8e0 20%, rgba(255,248,224,.75) 70%, transparent);
+  opacity: 0;
+}
+.fx-fire .tongue { /* 火舌尖：锯齿三角形（直线边缘语汇），由粗变细，上飘分裂 */
+  left: 50%; bottom: 50%;
+  width: 26px; height: 44px;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  opacity: 0;
+}
+.fx-fire .t1 { margin-left: -46px; background: linear-gradient(180deg, #ffd76a, #e84a00); }
+.fx-fire .t2 { margin-left: 12px; background: linear-gradient(180deg, #ffb300, #c93d00); }
+.fx-fire .t3 { margin-left: -13px; width: 18px; height: 30px; background: linear-gradient(180deg, #fff0b8, #ff8c00); }
+@media (prefers-reduced-motion: no-preference) {
+  .fx-fire .f3 { animation: fxFireLift .6s cubic-bezier(.2, .7, .4, 1) both; }
+  .fx-fire .f2 { animation: fxFireLift .9s cubic-bezier(.2, .7, .4, 1) both; }
+  .fx-fire .f1 { animation: fxFireLift 1.2s cubic-bezier(.2, .7, .4, 1) both; }
+  .fx-fire .core { animation: fxFireCore 1s steps(1, end) both; }
+  .fx-fire .t1 { animation: fxFireTongue .8s ease-out .12s both; }
+  .fx-fire .t2 { animation: fxFireTongue .96s ease-out .28s both; }
+  .fx-fire .t3 { animation: fxFireTongue .72s ease-out .44s both; }
+}
+@keyframes fxFireLift { /* 层级错速上飘：膨胀 + 整体上升分量（循环必须带主轴位移） */
+  0%   { transform: scale(.25); opacity: 0; }
+  22%  { opacity: .95; }
+  70%  { transform: scale(1.06) translateY(-26px); opacity: .85; }
+  100% { transform: scale(1.16) translateY(-52px); opacity: 0; }
+}
+@keyframes fxFireCore { /* 闪烁只给最亮层：2 亮 1 收，steps 硬切不补间 */
+  0%   { opacity: 0; }
+  8%   { opacity: .98; }
+  22%  { opacity: .25; }
+  36%  { opacity: .95; }
+  58%  { opacity: .3; }
+  72%  { opacity: .8; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.1) translateY(-30px); }
+}
+@keyframes fxFireTongue {
+  0%   { opacity: 0; transform: translateY(14px) scale(.5); }
+  25%  { opacity: .9; }
+  100% { opacity: 0; transform: translateY(-64px) scale(1.05); }
+}
+
+/* —— 机风横扫·风：月牙白浪×3 前大后小沿风向串联 + 速度线出画 + 碎屑流 —— */
+.fx-wind {
+  position: fixed;
+  z-index: 84;
+  overflow: visible;
+  pointer-events: none;
+}
+.fx-wind.rtl { transform: scaleX(-1); } /* 敌方施法风向镜像 */
+.fx-wind i { position: absolute; pointer-events: none; }
+.fx-wind .crescent { /* 月牙白浪：粗弧边=运动前缘，软尾用渐隐描边 */
+  top: 38%;
+  border-radius: 50%;
+  border: 11px solid transparent;
+  border-top-color: rgba(255, 255, 255, .88);
+  border-right-color: rgba(226, 238, 255, .5);
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, .4));
+  opacity: 0;
+}
+.fx-wind .c1 { left: 6%;  width: 118px; height: 118px; }
+.fx-wind .c2 { left: 26%; width: 86px;  height: 86px;  border-width: 9px; }
+.fx-wind .c3 { left: 44%; width: 58px;  height: 58px;  border-width: 7px; }
+.fx-wind .wline { /* 速度线：间距沿风向渐变，顶出画外 */
+  left: -80px;
+  width: 84px; height: 2.5px;
+  top: var(--wy, 30%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .75));
+  border-radius: 2px;
+  opacity: 0;
+}
+.fx-wind .debris { /* 碎屑流：受风物代言（叶/尘），沿风向翻滚 */
+  left: -20px;
+  width: 7px; height: 5px;
+  top: var(--dy, 40%);
+  border-radius: 60% 40% 55% 45%;
+  background: linear-gradient(120deg, #9db87a, #6f7a4d);
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fx-wind .c1 { animation: fxWindCrescent 1s cubic-bezier(.2, .7, .3, 1) calc(var(--cd, 0s)) both; }
+  .fx-wind .c2 { animation: fxWindCrescent .88s cubic-bezier(.2, .7, .3, 1) calc(var(--cd, 0s) + .04s) both; }
+  .fx-wind .c3 { animation: fxWindCrescent .76s cubic-bezier(.2, .7, .3, 1) calc(var(--cd, 0s) + .08s) both; }
+  .fx-wind .wline { animation: fxWindLine .56s linear var(--wd, 0s) both; }
+  .fx-wind .debris { animation: fxWindDebris .8s ease-out var(--dd, 0s) both; }
+}
+@keyframes fxWindCrescent {
+  0%   { opacity: 0; transform: translateX(-60px) scale(.7); }
+  22%  { opacity: .95; }
+  100% { opacity: 0; transform: translateX(230px) scale(1.12); }
+}
+@keyframes fxWindLine {
+  0%   { opacity: 0; transform: translateX(0); }
+  16%  { opacity: .85; }
+  100% { opacity: 0; transform: translateX(420px); } /* 出画 */
+}
+@keyframes fxWindDebris {
+  0%   { opacity: 0; transform: translate(0, 0) rotate(0); }
+  20%  { opacity: .9; }
+  100% { opacity: 0; transform: translate(340px, -26px) rotate(300deg); }
+}
+
+/* —— 骤雨倾身·雨：三层（前景长楔 65% / 中景短线 45% / 背景纱 13%）全层 -20° 统一倾角，
+   400/640ms 错速；溅花=前锋 3 亮 + 尾随 4 暗 —— */
+.fx-rain {
+  position: fixed;
+  z-index: 84;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 10px;
+}
+.fx-rain i { position: absolute; pointer-events: none; }
+.fx-rain .veil {
+  inset: 0;
+  background: linear-gradient(180deg, rgba(126, 154, 205, .13), rgba(100, 128, 180, .2));
+}
+.fx-rain .dropA {
+  top: -12%;
+  left: var(--rx, 10%);
+  width: 3px; height: 26px;
+  transform: rotate(-20deg);
+  background: linear-gradient(180deg, rgba(226, 238, 255, .65), transparent);
+  opacity: 0;
+}
+.fx-rain .dropB {
+  top: -8%;
+  left: var(--rx, 10%);
+  width: 1.6px; height: 14px;
+  transform: rotate(-20deg);
+  background: linear-gradient(180deg, rgba(210, 224, 248, .45), transparent);
+  opacity: 0;
+}
+.fx-rain .splash { bottom: 5%; left: 34%; width: 0; height: 0; }
+.fx-rain .splash.s2 { left: 68%; }
+.fx-rain .sp {
+  left: 0; bottom: 0;
+  width: 3.4px; height: 3.4px;
+  border-radius: 50%;
+  opacity: 0;
+}
+.fx-rain .sp.front { background: #eef5ff; box-shadow: 0 0 4px rgba(238, 245, 255, .8); }
+.fx-rain .sp.tail  { background: rgba(160, 180, 214, .55); }
+@media (prefers-reduced-motion: no-preference) {
+  .fx-rain .dropA { animation: fxDropFall .4s linear var(--rd, 0s) infinite; }
+  .fx-rain .dropB { animation: fxDropFall .64s linear var(--rd, 0s) infinite; }
+  .fx-rain .sp { animation: fxSplashPop .26s ease-out var(--sd, 0s) both; }
+}
+@keyframes fxDropFall {
+  0%   { transform: rotate(-20deg) translateY(-14px); opacity: 0; }
+  14%  { opacity: 1; }
+  86%  { opacity: 1; }
+  100% { transform: rotate(-20deg) translateY(200px); opacity: 0; }
+}
+@keyframes fxSplashPop { /* 一溅三群：锥形散布，时间错开，白沫只给前锋 */
+  0%   { opacity: 0; transform: translate(0, 0) scale(.4); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--sx, 0px), var(--sy, -16px)) scale(1); }
+}
+
+/* —— 迷雾狂潮·雾：软边面纱 2 层 + 下 1/3 浓缩带 + 边缘小团生灭；
+   对比度坍缩由 JS 给目标半场随从行挂 filter（雾是介质不是颜色） —— */
+.fx-fog {
+  position: fixed;
+  z-index: 84;
+  pointer-events: none;
+  opacity: 0;
+}
+.fx-fog i { position: absolute; pointer-events: none; }
+.fx-fog .sheet {
+  left: -6%;
+  width: 112%; height: 46%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(200, 210, 226, .5), rgba(200, 210, 226, 0) 72%);
+}
+.fx-fog .sh1 { top: 18%; }
+.fx-fog .sh2 { top: 44%; height: 40%; background: radial-gradient(closest-side, rgba(182, 194, 214, .44), rgba(182, 194, 214, 0) 72%); }
+.fx-fog .belt { /* 下 1/3 水平浓缩带：雾在物体腰部最「实」 */
+  left: 0; right: 0; bottom: 0; height: 34%;
+  background: linear-gradient(180deg, transparent, rgba(178, 190, 210, .42));
+  border-radius: 0 0 10px 10px;
+}
+.fx-fog .puff { /* 边缘小团：生成→合并→甩脱的生灭节奏 */
+  left: var(--px, 30%); top: var(--py, 40%);
+  width: 30px; height: 24px;
+  border-radius: 55% 45% 50% 50%;
+  background: radial-gradient(circle at 50% 40%, rgba(212, 222, 238, .55), rgba(212, 222, 238, 0) 70%);
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fx-fog { animation: fxFogLife 2.4s ease-in-out both; }
+  .fx-fog .sh1 { animation: fxFogDrift 1.6s ease-in-out infinite alternate; }
+  .fx-fog .sh2 { animation: fxFogDrift 2.4s ease-in-out -0.8s infinite alternate-reverse; }
+  .fx-fog .puff { animation: fxFogPuff 1.6s ease-in-out var(--pd, 0s) both; }
+}
+@keyframes fxFogLife { /* 雾整体：快速成雾 → 驻留 → 缓散 */
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes fxFogDrift { /* 面纱横向漂移（错速 1.6/2.4s） */
+  0%   { transform: translateX(-26px); }
+  100% { transform: translateX(26px); }
+}
+@keyframes fxFogPuff { /* 小团生灭：位置逐帧漂移，禁整体平移感 */
+  0%   { opacity: 0; transform: scale(.4) translate(0, 0); }
+  30%  { opacity: .85; }
+  70%  { opacity: .6; transform: scale(1.08) translate(10px, -6px); }
+  100% { opacity: 0; transform: scale(.5) translate(20px, -12px); }
+}
+
+/* 【v0.20】战场地面透视纹（JS 注入 SVG，见 app.js fxEnsureFloorGrid）：
+ * 静态背景层，z-index 0 压在牌局内容之下；中央安全区由 SVG mask 挖空
+ * 【v0.23】终局伪广角（透视五律收尾）:常态只显示直线组;endBattle 挂 .wide 切换到外弯曲线组
+ * (同端点二次贝塞尔向灭点反方向外弓)并缓推近——动作高潮用伪广角,透视线外弯 */
+.fx-floorgrid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .5;
+  transition: transform .9s cubic-bezier(.2, .7, .3, 1);
+}
+.fx-floorgrid svg { width: 100%; height: 100%; display: block; }
+.fx-floorgrid .curved { display: none; }
+.fx-floorgrid.wide .straight { display: none; }
+.fx-floorgrid.wide .curved { display: block; }
+.fx-floorgrid.wide { opacity: .68; transform: scale(1.06); } /* 推近一档,配合外弯线增强纵深张力 */
+@media (prefers-reduced-motion: no-preference) {
+  .fx-hitstar svg { animation: fx-hitstar-pop .28s cubic-bezier(.2, .8, .3, 1) both; }
+  .fx-hitstar b { animation: fx-hit-flash .24s steps(1, end) both; }
+  .fx-hitring { animation: fx-hitring-out .32s cubic-bezier(.2, .7, .3, 1) both; }
+  .fx-hshard { animation: fx-hshard-fly .52s cubic-bezier(.15, .75, .4, 1) both; }
+  /* 英雄重击的极性闪切实际走 WAAPI filter 动画（与 fx-shake 的 CSS animation 不冲突），
+     此类保留给未来没有动画冲突的挂载点 */
+}
+@keyframes fx-hitstar-pop {
+  0%   { transform: scale(.15); opacity: 1; }
+  62%  { transform: scale(1.14); opacity: .95; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+@keyframes fx-hit-flash {
+  0%   { opacity: .95; }
+  34%  { opacity: 0; }
+  67%  { opacity: .8; }
+  100% { opacity: 0; }
+}
+@keyframes fx-hitring-out {
+  0%   { transform: scale(.2); opacity: .95; }
+  100% { transform: scale(3.4); opacity: 0; }
+}
+@keyframes fx-hshard-fly {
+  0%   { transform: translate(0, 0) rotate(0) scale(.4); opacity: 0; }
+  16%  { opacity: 1; }
+  100% { transform: translate(var(--dx, 40px), var(--dy, -50px)) rotate(var(--rr, 180deg)) scale(1); opacity: 0; }
+}
+/* 黑白极性反转（WAAPI filter 动画的关键帧参考值，见 app.js damageHero）：只给重击，3 闪 240ms */
+
+/* 英雄受击：裂纹闪现（JS 注入裂纹 SVG）+ 红色血光罩 */
+.fx-crack {
+  position: absolute;
+  inset: -2px;
+  z-index: 6;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 42px;
+  opacity: 0;
+}
+.fx-crack svg { width: 100%; height: 100%; display: block; }
+.fx-hurt-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: 42px;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 55%,
+    rgba(255, 62, 40, .38),
+    rgba(255, 62, 40, .12) 62%,
+    transparent 80%);
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fx-crack     { animation: fx-crack-in 1.3s ease-out both; }
+  .fx-hurt-veil { animation: fx-hurt-flash .55s ease-out both; }
+}
+@keyframes fx-crack-in {
+  0%   { opacity: 0; transform: scale(.92); }
+  10%  { opacity: .95; transform: scale(1); }
+  28%  { opacity: .78; }
+  100% { opacity: 0; }
+}
+@keyframes fx-hurt-flash {
+  0%   { opacity: 0; }
+  16%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* 战报浮层：新事件滑入 */
+@media (prefers-reduced-motion: no-preference) {
+  .log-line { animation: fx-log-in .3s ease-out both; }
+}
+@keyframes fx-log-in {
+  0%   { opacity: 0; transform: translateY(7px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================
+   v0.6 本地双人：回合交接遮罩（复用终局遮罩骨架，标题缩小适配英雄名）
+   ========================================================== */
+.fx-end-mask.handoff .fx-end-panel { padding: 40px 64px; }
+.fx-end-mask.handoff .fx-end-panel b {
+  font-size: 34px;
+  letter-spacing: 8px;
+  text-indent: 8px;
+}
+.fx-end-mask.handoff .fx-end-panel span { font-size: 15px; }
+
+/* ==========================================================
+   v0.7 新增：组合技横幅/金光的静态样式（补缺口）+ 敌方红色变体 + 交接概要
+   ========================================================== */
+/* 组合技金光与横幅：此前只有关键帧没有静态样式（无定位无配色），
+   横幅从未真正显示过——v0.7 连同敌方红色变体一起补上 */
+/* 【v0.18】自发光四层（art-design 十二节）：白核-亮金-中金-暗金外晕（金色版同心四层）；
+   白核是最强强调色，只在中心最小一档 */
+.fx-combo-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 92;
+  pointer-events: none;
+  opacity: 0; /* 静态保持不可见；动画关键帧驱动明暗（减少动态效果时也不残留） */
+  background:
+    radial-gradient(ellipse 16% 11% at 50% 46%, rgba(255, 255, 248, .92), transparent 68%),
+    radial-gradient(ellipse 32% 21% at 50% 46%, rgba(255, 236, 180, .55), transparent 70%),
+    radial-gradient(ellipse 56% 36% at 50% 46%, rgba(216, 180, 92, .30), transparent 74%),
+    radial-gradient(ellipse 82% 54% at 50% 46%, rgba(138, 104, 40, .20), transparent 78%);
+}
+.fx-combo-flash.enemy {
+  background:
+    radial-gradient(ellipse 16% 11% at 50% 46%, rgba(255, 252, 248, .92), transparent 68%),
+    radial-gradient(ellipse 32% 21% at 50% 46%, rgba(255, 168, 138, .55), transparent 70%),
+    radial-gradient(ellipse 56% 36% at 50% 46%, rgba(224, 87, 74, .32), transparent 74%),
+    radial-gradient(ellipse 82% 54% at 50% 46%, rgba(120, 32, 20, .22), transparent 78%);
+}
+.fx-combo-banner {
+  position: fixed;
+  left: 50%;
+  top: 44%;
+  z-index: 93;
+  transform: translate(-50%, -50%);
+  padding: 16px 46px;
+  border-radius: 12px;
+  border: 2px solid rgba(240, 214, 138, .82);
+  background: linear-gradient(180deg, rgba(30, 24, 11, .93), rgba(12, 9, 4, .95));
+  color: #ffe9b0;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 6px;
+  text-shadow: 0 0 16px rgba(216, 180, 92, .95), 0 2px 6px rgba(0, 0, 0, .8);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, .6),
+    0 0 26px rgba(216, 180, 92, .35),
+    inset 0 0 0 1px rgba(255, 236, 190, .18);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.fx-combo-banner.enemy {
+  border-color: rgba(255, 152, 122, .82);
+  color: #ffcab8;
+  text-shadow: 0 0 16px rgba(255, 110, 80, .95), 0 2px 6px rgba(0, 0, 0, .8);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, .6),
+    0 0 26px rgba(255, 110, 80, .30),
+    inset 0 0 0 1px rgba(255, 205, 180, .18);
+}
+
+/* ==========================================================
+   【v0.18】组合技魔法阵四拍演出（art-design 十五节·魔法阵四律）
+   五件套同心（主环/符文环/六芒星/内环/中心菱核,半径比 100:90:70:50:28）
+   + 悬浮三件套（光柱/上升粒子×5/地面暗投影）
+   四拍：阵展开 400ms → 符文点亮 120ms steps → 光柱 300ms → 粒子 1600ms
+   ========================================================== */
+.fx-mcircle {
+  position: fixed;
+  z-index: 91;
+  width: 0; height: 0;
+  pointer-events: none;
+  --mc1: #f2cd7c;   /* 亮金 */
+  --mc2: #d4af37;   /* 中金 */
+  --mc3: #8a6d1f;   /* 暗金 */
+  --mcc: #fff6df;   /* 白核 */
+  --mcp: rgba(255, 236, 190, .85); /* 光柱 */
+}
+.fx-mcircle.enemy {
+  --mc1: #ff9a86;
+  --mc2: #e0574a;
+  --mc3: #7e2318;
+  --mcc: #ffe9e0;
+  --mcp: rgba(255, 176, 146, .8);
+}
+.fx-mcircle svg {
+  position: absolute;
+  left: -130px; top: -130px;
+  width: 260px; height: 260px;
+  opacity: 0;
+  overflow: visible;
+}
+.fx-mcircle .ringo { fill: none; stroke: var(--mc2); stroke-width: 3; }
+.fx-mcircle .ringi { fill: none; stroke: var(--mc1); stroke-width: 1.5; }
+.fx-mcircle .hexa { fill: none; stroke: var(--mc1); stroke-width: 2; opacity: .8; }
+.fx-mcircle .runes { stroke: var(--mc1); stroke-width: 2; opacity: 0; }
+.fx-mcircle .gem { fill: var(--mc2); stroke: var(--mc1); stroke-width: 1.5; opacity: 0; }
+.fx-mcircle .mcore { fill: var(--mcc); opacity: 0; }
+.fx-mcircle .pillar { /* 光柱：中心白核竖向能量，底部最亮向上渐隐 */
+  position: absolute;
+  left: -26px; top: -190px;
+  width: 52px; height: 170px;
+  background: linear-gradient(180deg, transparent, var(--mcp) 55%, rgba(255, 255, 255, .9));
+  border-radius: 26px 26px 0 0 / 40px 40px 0 0;
+  filter: blur(1px);
+  opacity: 0;
+}
+.fx-mcircle .mcshadow { /* 地面暗投影：有投影才悬浮 */
+  position: absolute;
+  left: -70px; top: 96px;
+  width: 140px; height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, .5), transparent 72%);
+  opacity: 0;
+}
+.fx-mcircle .mpt { /* 上升粒子：大小错落，四关键帧带主轴位移 */
+  position: absolute;
+  top: 10px;
+  left: var(--mx, 0px);
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--mcc);
+  box-shadow: 0 0 6px var(--mcp);
+  opacity: 0;
+}
+.fx-mcircle .mpt:nth-child(odd) { width: 3.5px; height: 3.5px; }
+@media (prefers-reduced-motion: no-preference) {
+  /* 拍1:阵展开(scale .6→1 + rotate -30°→0,400ms ease-out) */
+  .fx-mcircle svg { animation: mcOpen .4s cubic-bezier(.2, .8, .3, 1) both; }
+  /* 拍2:符文点亮(120ms steps 硬切)+中心符号 */
+  .fx-mcircle .runes { animation: mcRunes .12s steps(1, end) .4s both; }
+  .fx-mcircle .gem { animation: mcRunes .12s steps(1, end) .46s both; }
+  /* 拍3:光柱(300ms 升起)+白核 steps 闪 */
+  .fx-mcircle .pillar { animation: mcPillar .3s cubic-bezier(.2, .7, .3, 1) .52s both; }
+  .fx-mcircle .mcore { animation: mcCore .96s steps(1, end) .5s both; }
+  .fx-mcircle .mcshadow { animation: mcShadow .3s ease-out .52s both; }
+  /* 拍4:粒子循环(1600ms 四关键帧) */
+  .fx-mcircle .mpt { animation: mcRise 1.6s ease-in-out var(--md, 0s) infinite; }
+}
+@keyframes mcOpen {
+  0%   { opacity: 0; transform: scale(.6) rotate(-30deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes mcRunes {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes mcPillar {
+  0%   { opacity: 0; transform: scaleY(0); transform-origin: 50% 100%; }
+  60%  { opacity: .95; }
+  100% { opacity: .8; transform: scaleY(1); transform-origin: 50% 100%; }
+}
+@keyframes mcCore { /* 白核双闪节拍：亮-暗-再亮 */
+  0%   { opacity: 0; }
+  10%  { opacity: 1; }
+  30%  { opacity: .2; }
+  50%  { opacity: .95; }
+  75%  { opacity: .35; }
+  100% { opacity: 0; }
+}
+@keyframes mcShadow {
+  0%   { opacity: 0; transform: scale(.4); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes mcRise { /* 上升粒子四关键帧(带主轴位移,只有透明度变化=贴纸) */
+  0%   { opacity: 0; transform: translateY(0) scale(.5); }
+  22%  { opacity: .95; }
+  60%  { opacity: .7; transform: translateY(-72px) scale(1); }
+  100% { opacity: 0; transform: translateY(-128px) scale(.4); }
+}
+
+/* v0.7 交接概要：双人交接遮罩里的双方血量/随从/手牌数 */
+.fx-end-mask.handoff .handoff-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  margin: 16px 0 4px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: 1px solid rgba(216, 180, 92, .25);
+  background: linear-gradient(180deg, rgba(10, 13, 22, .5), rgba(4, 6, 12, .4));
+}
+.fx-end-mask.handoff .handoff-summary .hs-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 150px;
+}
+.fx-end-mask.handoff .handoff-summary .hs-side b {
+  font-size: 15px;
+  letter-spacing: 2px;
+  color: var(--gold-hi);
+  animation: none; /* 概要里的名字不参与终局标题的辉光动画 */
+}
+.fx-end-mask.handoff .handoff-summary .hs-side i {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--ink-dim);
+  letter-spacing: 1px;
+}
+.fx-end-mask.handoff .handoff-summary .hs-vs {
+  color: rgba(255, 120, 90, .8);
+  font-weight: 800;
+  letter-spacing: 1px;
+  font-size: 14px;
+}
+
+/* ==========================================================
+   11. 长按大图浮层（v0.12）：免按钮,松手即散
+   ========================================================== */
+.fx-peek {
+  position: fixed;
+  z-index: 70;
+  width: 230px;
+  pointer-events: none;   /* 纯展示,不挡手牌手势 */
+  filter: drop-shadow(0 14px 30px rgba(0,0,0,.65));
+}
+.fx-peek .pk-card {
+  position: relative;
+  border-radius: 14px;
+  border: 2px solid var(--gold);
+  background:
+    linear-gradient(180deg, rgba(255,246,220,.10), rgba(255,255,255,0) 30%),
+    linear-gradient(180deg, #332a1c, #1a150f);
+  box-shadow: inset 0 0 0 1px rgba(216,180,92,.25), inset 0 1px 0 rgba(255,236,190,.25);
+  overflow: hidden;
+  padding-bottom: 8px;
+}
+.fx-peek .pk-card.spell { border-color: #7d9fd8; }
+.fx-peek .icon-art { width: 100%; height: 140px; display: block; }
+.fx-peek .pk-card.spell .icon-art { opacity: .92; }
+.fx-peek .cost-gem { position: absolute; top: -4px; left: -4px; }
+.fx-peek .pk-name {
+  text-align: center; font-size: 16px; font-weight: 800; color: var(--gold-hi);
+  padding: 7px 6px 5px; text-shadow: 0 1px 2px rgba(0,0,0,.7);
+  background: linear-gradient(90deg, transparent, rgba(6,5,2,.38) 16%, rgba(6,5,2,.38) 84%, transparent);
+}
+.fx-peek .pk-stats { display: flex; justify-content: center; gap: 14px; font-size: 12.5px; font-weight: 700; color: var(--ink-dim); padding-bottom: 4px; }
+.fx-peek .pk-stats .a { color: var(--atk); }
+.fx-peek .pk-stats .h, .fx-peek .pk-stats .red { color: #ff8a7a; }
+.fx-peek .pk-desc {
+  margin: 0 10px; font-size: 11px; line-height: 1.55; color: var(--ink-dim); text-align: center;
+  border-radius: 6px; padding: 4px 6px;
+  background: linear-gradient(180deg, rgba(0,0,0,.26), rgba(0,0,0,.10));
+  box-shadow: inset 0 0 0 1px rgba(216,180,92,.10);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fx-peek { animation: fx-peek-in .18s cubic-bezier(.2,.9,.3,1.2) both; }
+}
+@keyframes fx-peek-in {
+  from { opacity: 0; transform: translateY(14px) scale(.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
